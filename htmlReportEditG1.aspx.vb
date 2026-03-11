@@ -57,6 +57,7 @@ Partial Class htmlReportEditG1
 
             'sbEraseWrongDecimSep()
             'Dim sValidRes As String = sbValidateInput(True)
+            Dim bValidRes As Boolean = ValidateMatrixInputs
             'If sValidRes.Trim <> String.Empty Then
             '    myPageEvents.sbDisplaySimpleMessageBox(sValidRes)
             '    Exit Sub
@@ -66,7 +67,7 @@ Partial Class htmlReportEditG1
             '' Perform calcs
             sbTableA_Calculations()
             'sbTableBCalculations()
-            'sbLoadTableC()
+            sbLoadTableC()
 
             'lblError.Text = ""
             ''btnSend.Enabled = False
@@ -148,6 +149,7 @@ Partial Class htmlReportEditG1
             fSum_TableA = 0
             'sbGetTableA_Contribution(txtYear.Text)
             Dim holder As ContentPlaceHolder = CType(Me.Master.FindControl("MainContent"), ContentPlaceHolder)
+            Dim allTextBoxes As List(Of TextBox) = FindAllTextBoxes(holder)
 
             Dim values() As Integer = {1, 2, 3, 5}
             Dim i As Integer
@@ -167,288 +169,325 @@ Partial Class htmlReportEditG1
                     Next
                 End If
 
-                rowTotal = rowTotal * item.Contribution
+                if item.IsGroupTotal Then
+                    Dim grpsumW As Decimal = 0D
+                    Dim grpsumQ As Decimal = 0D
 
-                objTBEE = DirectCast(holder.FindControl("txtEisfWT_" & item.MaterialCode), TextBox)
-                If objTBEE IsNot Nothing Then
-                    objTBEE.Text = rowTotal.ToString()
+                    'Line items = any textbox whose ID ends with _<key> excluding totals
+                    For Each lineTb As TextBox In allTextBoxes
+                        If lineTb.ID Is Nothing Then Continue For
+                        If lineTb.ID.StartsWith("txtWeightT_", StringComparison.OrdinalIgnoreCase) Then Continue For
+                        If lineTb.ID.StartsWith("txtQtyT_", StringComparison.OrdinalIgnoreCase) Then Continue For
+
+                        If lineTb.ID.EndsWith("_" & key, StringComparison.OrdinalIgnoreCase) Then
+                            If lineTb.ID.StartsWith("txtWeight_", StringComparison.OrdinalIgnoreCase) Then
+                                grpsumW += ParseDecimalSafe(lineTb.Text)
+                            ElseIf If lineTb.ID.StartsWith("txtQty_", StringComparison.OrdinalIgnoreCase) Then
+                                grpsumQ += ParseDecimalSafe(lineTb.Text)
+                            End if
+                        End If
+                    Next
+                end if
+
+                dim totalTbW as textbox = DirectCast(holder.FindControl("txtWeightT_" & item.MaterialCode), TextBox)
+                If totalTbW IsNot Nothing Then
+                    totalTbW.Text = grpsumW.ToString("0.00", CultureInfo.InvariantCulture)
                 End If
-                fSum_TableA += rowTotal
+                dim totalTbQ as textbox = DirectCast(holder.FindControl("txtWeightT_" & item.MaterialCode), TextBox)
+                If totalTbQ IsNot Nothing Then
+                    totalTbQ.Text = grpsumQ.ToString("0.00", CultureInfo.InvariantCulture)
+                End If
             Next
-
-            'display the sum
-            txtSumTableA.Text = FormatNumber(fSum_TableA, 2)
 
         Catch ex As Exception
             lblError.Text = "Error on sbLoadTableA_Calculations - " & ex.Message
         End Try
     End Sub
+    Private Function CalculateGroupTotals (rows As List(Of MatrixRowDef))
+            Try
+            For Each item As MatrixRowDef In rows
+                Dim rowTotal As Decimal = 0
 
-    Private Sub sbTableBCalculations()
-        Dim sTableB_Eisfora As String = System.Configuration.ConfigurationManager.AppSettings("REPORT_TABLE_B_STHATHERI_EISFORA")
-        Dim txtBoxId As String = String.Empty
-        Dim txtTem As New TextBox
-        Try
-            'For Each txtBox As TextBox In Me.Master.FindControl("MainContent").Controls.OfType(Of TextBox)
-            '    If (txtBox.ID.StartsWith("YR_WeightB")) Then
-            '        If IsNumeric(txtBox.Text) Then
-            '            txtBox.Text = FormatNumber(txtBox.Text, 2)
-            '        End If
-            '    End If
-            '    If (txtBox.ID.EndsWith("_TE")) Then
-            '        txtBoxId = txtBox.ID.ToString
-            '        txtBoxId = txtBoxId.Replace("_TE", "")
-            '        txtTem = Me.Master.FindControl("MainContent").FindControl(txtBoxId)
-            '        If IsNumeric(txtTem.Text) Then
-            '            txtBox.Text = FormatNumber(Convert.ToDouble(sTableB_Eisfora) * Convert.ToDouble(txtTem.Text), 4)
-            '            fSum_TableB += txtBox.Text
-            '        End If
-            '    End If
-            'Next
-            'txtSumTableB.Text = FormatNumber(fSum_TableB, 2)
-
-        Catch ex As Exception
-            lblError.Text = "Error on sbTableBCalculations - " & ex.Message
+                If (Not item.IsGroupHeader) And (Not item.IsGroupTotal) Then
+                    Dim val As Decimal
+                    For Each i In values
+                        objTBW = DirectCast(holder.FindControl("txtWeight_" & item.MaterialCode & "_" & i.ToString), TextBox)
+                        If objTBW IsNot Nothing Then
+                            If Decimal.TryParse(objTBW.Text, Val) Then
+                                rowTotal += val
+                            End If
+                        End If
+                    Next
+                End If
+            Catch ex As Exception
+            lblError.Text = "Error on sbLoadTableA_Calculations - " & ex.Message
         End Try
-    End Sub
+    end Function
+    ' Private Sub sbTableBCalculations()
+    '     Dim sTableB_Eisfora As String = System.Configuration.ConfigurationManager.AppSettings("REPORT_TABLE_B_STHATHERI_EISFORA")
+    '     Dim txtBoxId As String = String.Empty
+    '     Dim txtTem As New TextBox
+    '     Try
+    '         For Each txtBox As TextBox In Me.Master.FindControl("MainContent").Controls.OfType(Of TextBox)
+    '            If (txtBox.ID.StartsWith("YR_WeightB")) Then
+    '                If IsNumeric(txtBox.Text) Then
+    '                    txtBox.Text = FormatNumber(txtBox.Text, 2)
+    '                End If
+    '            End If
+    '            If (txtBox.ID.EndsWith("_TE")) Then
+    '                txtBoxId = txtBox.ID.ToString
+    '                txtBoxId = txtBoxId.Replace("_TE", "")
+    '                txtTem = Me.Master.FindControl("MainContent").FindControl(txtBoxId)
+    '                If IsNumeric(txtTem.Text) Then
+    '                    txtBox.Text = FormatNumber(Convert.ToDouble(sTableB_Eisfora) * Convert.ToDouble(txtTem.Text), 4)
+    '                    fSum_TableB += txtBox.Text
+    '                End If
+    '            End If
+    '         Next
+    '         txtSumTableB.Text = FormatNumber(fSum_TableB, 2)
+
+    '     Catch ex As Exception
+    '         lblError.Text = "Error on sbTableBCalculations - " & ex.Message
+    '     End Try
+    ' End Sub
     Private Sub sbLoadTableC()
         Try
-            'Dim sSumC As String
-            'Dim fSiskeuasies_EE As Double
+            Dim sSumC As String
+            Dim fSiskeuasies_EE As Double
 
-            'fSiskeuasies_EE = Convert.ToDouble(txtTblC_EisforaA.Text) * Convert.ToDouble(txtTblC_Multiplier.Text)
-            'txtTblC_EpimEisfora.Text = FormatNumber(fSiskeuasies_EE, 2)
+            fSiskeuasies_EE = Convert.ToDouble(txtTblC_EisforaA.Text) * Convert.ToDouble(txtTblC_Multiplier.Text)
+            txtTblC_EpimEisfora.Text = FormatNumber(fSiskeuasies_EE, 2)
 
-            'fSum_Table_AB = fSum_TableA + fSum_TableB
-            'txtSumTable_AB.Text = FormatNumber(fSum_Table_AB, 2)
+            fSum_Table_AB = fSum_TableA + fSum_TableB
+            txtSumTable_AB.Text = FormatNumber(fSum_Table_AB, 2)
 
-            'txtSumTableC.Text = FormatNumber(txtTblC_EpimEisfora.Text, 2)
-            'txtSumTable_ABC.Text = FormatNumber(fSum_Table_AB + fSiskeuasies_EE, 2)
+            txtSumTableC.Text = FormatNumber(txtTblC_EpimEisfora.Text, 2)
+            txtSumTable_ABC.Text = FormatNumber(fSum_Table_AB + fSiskeuasies_EE, 2)
 
         Catch ex As Exception
             lblError.Text = "Error on sbLoadTableC - " & ex.Message
         End Try
     End Sub
 
-    Private Function sbLoadSavedData() As Boolean
-        Try
-            Dim dsSavedData As New DataSet
-            Dim bWithBags As Boolean = (Session(sSession_CompanyBags) = "1")
-            Dim objTB As New TextBox
+    ' Private Function sbLoadSavedData() As Boolean
+    '     Try
+    '         Dim dsSavedData As New DataSet
+    '         Dim bWithBags As Boolean = (Session(sSession_CompanyBags) = "1")
+    '         Dim objTB As New TextBox
 
 
 
-            sbClearFrm()
-            sbLoadTableA_Contribution(txtYear.Text)
-            sbLoadTableC()
+    '         sbClearFrm()
+    '         sbLoadTableA_Contribution(txtYear.Text)
+    '         sbLoadTableC()
 
-            'REPORT DATA - QUANTITIES
-            With myReport
-                .Year = txtYear.Text
-                '.CompanyID = Session(sSession_CompanyID)
-                .CompanyID = lblCompanyID.Text
-                bRetrieve = .fnGetHTMLReport_SavedData(False, EnumsGlobal.ReportTypeOldNew.Type2024)
-                If Not bRetrieve Then
-                    lblError.Text = .GetDBError & " " & .GetExecutionError
-                    Return False
-                End If
+    '         'REPORT DATA - QUANTITIES
+    '         With myReport
+    '             .Year = txtYear.Text
+    '             '.CompanyID = Session(sSession_CompanyID)
+    '             .CompanyID = lblCompanyID.Text
+    '             bRetrieve = .fnGetHTMLReport_SavedData(False, EnumsGlobal.ReportTypeOldNew.Type2024)
+    '             If Not bRetrieve Then
+    '                 lblError.Text = .GetDBError & " " & .GetExecutionError
+    '                 Return False
+    '             End If
 
-                'dtReport = myReport.GetHTML_ReportDT
-                dsSavedData = .GetHTML_SavedReportDS
-            End With
+    '             'dtReport = myReport.GetHTML_ReportDT
+    '             dsSavedData = .GetHTML_SavedReportDS
+    '         End With
 
-            Dim myCookie As HttpCookie = Request.Cookies("myCookie")
+    '         Dim myCookie As HttpCookie = Request.Cookies("myCookie")
 
-            myCookie.Values.Add("Year", txtYear.Text)
-            myCookie.Values.Add("ULogin", Session(sSession_UserLogin))
-            myCookie.Expires = DateTime.Now.AddHours(12)
-            Response.Cookies.Add(myCookie)
+    '         myCookie.Values.Add("Year", txtYear.Text)
+    '         myCookie.Values.Add("ULogin", Session(sSession_UserLogin))
+    '         myCookie.Expires = DateTime.Now.AddHours(12)
+    '         Response.Cookies.Add(myCookie)
 
 
-            'lblEtos.Text = dsSavedData.Tables(0).Rows(0).Item("YR_Year").ToString
-            'lblCDate.Text = FormatDateTime(CDate(dsSavedData.Tables(0).Rows(0).Item("YR_DateSaved")), DateFormat.ShortDate)
+    '         lblEtos.Text = dsSavedData.Tables(0).Rows(0).Item("YR_Year").ToString
+    '         lblCDate.Text = FormatDateTime(CDate(dsSavedData.Tables(0).Rows(0).Item("YR_DateSaved")), DateFormat.ShortDate)
 
-            '------------TABLE C-----------------
-            'txtTblC_EisforaA.Text = dsSavedData.Tables(0).Rows(0).Item("YR_WeightC").ToString
+    '         ------------TABLE C-----------------
+    '         txtTblC_EisforaA.Text = dsSavedData.Tables(0).Rows(0).Item("YR_WeightC").ToString
 
-            'If Not IsNumeric(dsSavedData.Tables(0).Rows(0).Item("YR_ContribC").ToString) Then
-            '    txtTblC_Multiplier.Text = System.Configuration.ConfigurationManager.AppSettings("REPORT_TABLE_C_MULTIPLIER")
-            'Else
-            '    txtTblC_Multiplier.Text = dsSavedData.Tables(0).Rows(0).Item("YR_ContribC").ToString
-            'End If
-            'txtTblC_Multiplier.Text = FormatNumber(txtTblC_Multiplier.Text, 2)
+    '         If Not IsNumeric(dsSavedData.Tables(0).Rows(0).Item("YR_ContribC").ToString) Then
+    '            txtTblC_Multiplier.Text = System.Configuration.ConfigurationManager.AppSettings("REPORT_TABLE_C_MULTIPLIER")
+    '         Else
+    '            txtTblC_Multiplier.Text = dsSavedData.Tables(0).Rows(0).Item("YR_ContribC").ToString
+    '         End If
+    '         txtTblC_Multiplier.Text = FormatNumber(txtTblC_Multiplier.Text, 2)
 
-            ''--------SXETIKA ME TI DILWSI--------
-            'If dsSavedData.Tables(0).Rows(0).Item("YR_Modif").ToString = "0" Then
-            '    chkEdit.Checked = False
-            '    chkNew.Checked = True
-            '    chkNew.Enabled = True
-            '    txtDateSentPrev.Enabled = False
-            'Else
-            '    chkEdit.Checked = True
-            '    chkNew.Checked = False
-            '    chkNew.Enabled = False
-            '    txtDateSentPrev.Enabled = True
-            '    If dsSavedData.Tables(0).Rows(0).Item("YR_DateSentPrev").ToString.Trim = "" Then
-            '        txtDateSentPrev.Text = ""
-            '    Else
-            '        txtDateSentPrev.Text = FormatDateTime(CDate(dsSavedData.Tables(0).Rows(0).Item("YR_DateSentPrev")), DateFormat.ShortDate)
-            '    End If
+    '         '--------SXETIKA ME TI DILWSI--------
+    '         If dsSavedData.Tables(0).Rows(0).Item("YR_Modif").ToString = "0" Then
+    '            chkEdit.Checked = False
+    '            chkNew.Checked = True
+    '            chkNew.Enabled = True
+    '            txtDateSentPrev.Enabled = False
+    '         Else
+    '            chkEdit.Checked = True
+    '            chkNew.Checked = False
+    '            chkNew.Enabled = False
+    '            txtDateSentPrev.Enabled = True
+    '            If dsSavedData.Tables(0).Rows(0).Item("YR_DateSentPrev").ToString.Trim = "" Then
+    '                txtDateSentPrev.Text = ""
+    '            Else
+    '                txtDateSentPrev.Text = FormatDateTime(CDate(dsSavedData.Tables(0).Rows(0).Item("YR_DateSentPrev")), DateFormat.ShortDate)
+    '            End If
 
-            'End If
-            'txtNotes.Text = dsSavedData.Tables(0).Rows(0).Item("YR_Comments").ToString
+    '         End If
+    '         txtNotes.Text = dsSavedData.Tables(0).Rows(0).Item("YR_Comments").ToString
 
-            'If dsSavedData.Tables(0).Rows(0).Item("YR_ChkSymet1").ToString = "0" Then
-            '    chkSymet1.Checked = False
-            'Else
-            '    chkSymet1.Checked = True
-            'End If
-            'If dsSavedData.Tables(0).Rows(0).Item("YR_ChkSymet2").ToString = "0" Then
-            '    chkSymet2.Checked = False
-            'Else
-            '    chkSymet2.Checked = True
-            'End If
-            'If dsSavedData.Tables(0).Rows(0).Item("YR_ChkSymet3").ToString = "0" Then
-            '    chkSymet3.Checked = False
-            'Else
-            '    chkSymet3.Checked = True
-            'End If
+    '         If dsSavedData.Tables(0).Rows(0).Item("YR_ChkSymet1").ToString = "0" Then
+    '            chkSymet1.Checked = False
+    '         Else
+    '            chkSymet1.Checked = True
+    '         End If
+    '         If dsSavedData.Tables(0).Rows(0).Item("YR_ChkSymet2").ToString = "0" Then
+    '            chkSymet2.Checked = False
+    '         Else
+    '            chkSymet2.Checked = True
+    '         End If
+    '         If dsSavedData.Tables(0).Rows(0).Item("YR_ChkSymet3").ToString = "0" Then
+    '            chkSymet3.Checked = False
+    '         Else
+    '            chkSymet3.Checked = True
+    '         End If
 
-            'txtYR_SenderName.Text = dsSavedData.Tables(0).Rows(0).Item("YR_SenderName").ToString
+    '         txtYR_SenderName.Text = dsSavedData.Tables(0).Rows(0).Item("YR_SenderName").ToString
 
-            Return True
+    '         Return True
 
-        Catch ex As Exception
-            lblError.Text = "Error on sbLoadSavedData - " & ex.Message
-            Return False
-        End Try
-    End Function
-    Private Function sbSavePackagingData() As Integer
-        Try
-            Dim bExec As Boolean
-            Dim modif As Integer = 0 'new report
-            'Dim dateSentPrev As String = Format(Date.Now, "yyyy/MM/dd")
-            Dim dateSentPrev As String = String.Empty
-            Dim objTB As New TextBox
-            Dim iCId As Integer
+    '     Catch ex As Exception
+    '         lblError.Text = "Error on sbLoadSavedData - " & ex.Message
+    '         Return False
+    '     End Try
+    ' End Function
+    ' Private Function sbSavePackagingData() As Integer
+    '     Try
+    '         Dim bExec As Boolean
+    '         Dim modif As Integer = 0 'new report
+    '         'Dim dateSentPrev As String = Format(Date.Now, "yyyy/MM/dd")
+    '         Dim dateSentPrev As String = String.Empty
+    '         Dim objTB As New TextBox
+    '         Dim iCId As Integer
 
-            'If Not Integer.TryParse(lblCompanyID.Text, iCId) Then
-            '    iCId = -1
-            'End If
+    '         If Not Integer.TryParse(lblCompanyID.Text, iCId) Then
+    '            iCId = -1
+    '         End If
 
-            'If chkNew.Checked = False Then
-            '    'modified report
-            '    modif = 1
-            '    'get date of 1st report
-            '    If txtDateSentPrev.Text.Trim <> "" Then
-            '        dateSentPrev = Format(CDate(txtDateSentPrev.Text.Trim), "yyyy/MM/dd")
-            '    End If
-            'End If
+    '         If chkNew.Checked = False Then
+    '            'modified report
+    '            modif = 1
+    '            'get date of 1st report
+    '            If txtDateSentPrev.Text.Trim <> "" Then
+    '                dateSentPrev = Format(CDate(txtDateSentPrev.Text.Trim), "yyyy/MM/dd")
+    '            End If
+    '         End If
 
-            ''Dim iCId As Integer = Session(sSession_CompanyID)
+    '         'Dim iCId As Integer = Session(sSession_CompanyID)
 
-            ''If iCId <= 0 Then
-            ''    iCId = Convert.ToInt32(myCookie.Values("CId"))
-            ''End If
+    '         'If iCId <= 0 Then
+    '         '    iCId = Convert.ToInt32(myCookie.Values("CId"))
+    '         'End If
 
-            'If iCId <= 0 Then
-            '    lblError.Text = "Invalid Company Code"
-            '    Return EnumsGlobal.FunctionRes.ErrorResult
-            'End If
+    '         If iCId <= 0 Then
+    '            lblError.Text = "Invalid Company Code"
+    '            Return EnumsGlobal.FunctionRes.ErrorResult
+    '         End If
 
-            'Dim myCookie As HttpCookie = Request.Cookies("myCookie")
-            'With myCookie
-            '    .Values("CId") = iCId.ToString
-            '    .Values("Year") = txtYear.Text
-            '    .Values("ULogin") = Session(sSession_UserLogin)
-            '    .Expires = DateTime.Now.AddHours(12)
-            'End With
-            'Response.AppendCookie(myCookie)
+    '         Dim myCookie As HttpCookie = Request.Cookies("myCookie")
+    '         With myCookie
+    '            .Values("CId") = iCId.ToString
+    '            .Values("Year") = txtYear.Text
+    '            .Values("ULogin") = Session(sSession_UserLogin)
+    '            .Expires = DateTime.Now.AddHours(12)
+    '         End With
+    '         Response.AppendCookie(myCookie)
 
-            'Dim rF As New ReportFields2024
-            'Dim pinfo() As Reflection.PropertyInfo = rF.GetType().GetProperties()
-            'Dim holder As ContentPlaceHolder = CType(Me.Master.FindControl("MainContent"), ContentPlaceHolder)
+    '         Dim rF As New ReportFields2024
+    '         Dim pinfo() As Reflection.PropertyInfo = rF.GetType().GetProperties()
+    '         Dim holder As ContentPlaceHolder = CType(Me.Master.FindControl("MainContent"), ContentPlaceHolder)
 
-            'Dim clog As New clErrorLog
+    '         Dim clog As New clErrorLog
 
-            'With rF
-            '    ' TableA fields
-            '    For Each [property] As Reflection.PropertyInfo In pinfo
-            '        If ([property].Name.StartsWith("WeightA") Or [property].Name.StartsWith("WeightB")) Then
-            '            'If [property].Name.EndsWith("A1") Or [property].Name.EndsWith("A3") Or [property].Name.EndsWith("A8") Or [property].Name.EndsWith("A12") Or [property].Name.EndsWith("A13") _
-            '            '    Or [property].Name.EndsWith("A10") Or [property].Name.EndsWith("A11") Or [property].Name.EndsWith("A18") Or [property].Name.EndsWith("A19") _
-            '            '    Or [property].Name.EndsWith("A20") Or [property].Name.EndsWith("A21") Or [property].Name.EndsWith("A22") Or [property].Name.EndsWith("A23") _
-            '            '    Or [property].Name.EndsWith("A15") Then
-            '            '    [property].SetValue(rF, "0")
-            '            'Else
-            '            Dim sTxtBoxName As String = String.Empty
-            '            If [property].Name.StartsWith("WeightA") Then
-            '                sTxtBoxName = "YR_" & [property].Name.ToString
-            '            ElseIf [property].Name.StartsWith("WeightB") Then
-            '                sTxtBoxName = "YR_" & [property].Name.ToString
-            '            End If
-            '            objTB = DirectCast(holder.FindControl(sTxtBoxName), TextBox)
-            '            If objTB IsNot Nothing Then
-            '                [property].SetValue(rF, objTB.Text.Trim)
-            '            Else
-            '                [property].SetValue(rF, "0")
-            '            End If
-            '        End If
-            '    Next
+    '         With rF
+    '            ' TableA fields
+    '            For Each [property] As Reflection.PropertyInfo In pinfo
+    '                If ([property].Name.StartsWith("WeightA") Or [property].Name.StartsWith("WeightB")) Then
+    '                    'If [property].Name.EndsWith("A1") Or [property].Name.EndsWith("A3") Or [property].Name.EndsWith("A8") Or [property].Name.EndsWith("A12") Or [property].Name.EndsWith("A13") _
+    '                    '    Or [property].Name.EndsWith("A10") Or [property].Name.EndsWith("A11") Or [property].Name.EndsWith("A18") Or [property].Name.EndsWith("A19") _
+    '                    '    Or [property].Name.EndsWith("A20") Or [property].Name.EndsWith("A21") Or [property].Name.EndsWith("A22") Or [property].Name.EndsWith("A23") _
+    '                    '    Or [property].Name.EndsWith("A15") Then
+    '                    '    [property].SetValue(rF, "0")
+    '                    'Else
+    '                    Dim sTxtBoxName As String = String.Empty
+    '                    If [property].Name.StartsWith("WeightA") Then
+    '                        sTxtBoxName = "YR_" & [property].Name.ToString
+    '                    ElseIf [property].Name.StartsWith("WeightB") Then
+    '                        sTxtBoxName = "YR_" & [property].Name.ToString
+    '                    End If
+    '                    objTB = DirectCast(holder.FindControl(sTxtBoxName), TextBox)
+    '                    If objTB IsNot Nothing Then
+    '                        [property].SetValue(rF, objTB.Text.Trim)
+    '                    Else
+    '                        [property].SetValue(rF, "0")
+    '                    End If
+    '                End If
+    '            Next
 
-            '    ' Remaining fields
-            '    .Year = txtYear.Text
-            '    .CID = iCId
-            '    .Modif = modif
-            '    .DateSentPrev = dateSentPrev
-            '    .DateSaved = String.Empty
-            '    .DateSent = String.Empty
-            '    .Comments = txtNotes.Text.Trim
-            '    .WeightB = 0
-            '    .ContribB = System.Configuration.ConfigurationManager.AppSettings("REPORT_TABLE_B_STHATHERI_EISFORA")
-            '    .WeightC = txtTblC_EisforaA.Text.Trim
-            '    .ContribC = txtTblC_Multiplier.Text.Trim
-            '    .SenderName = txtYR_SenderName.Text.Trim
-            '    .Symet1 = IIf(chkSymet1.Checked = True, 1, 0)
-            '    .Symet2 = IIf(chkSymet2.Checked = True, 1, 0)
-            '    .Symet3 = IIf(chkSymet3.Checked = True, 1, 0)
-            '    .Form2021 = EnumsGlobal.ReportTypeOldNew.Type2024
-            '    .OneUseSysk = txtOneUseSysk.Text.Trim
-            '    .MultiUseSysk = txtMultiUseSysk.Text.Trim
-            '    .PrimarySysk = txtPrimarySysk.Text.Trim
-            '    .SecondarySysk = txtSecondarySysk.Text.Trim
-            '    '.WeightB2 = txtXartiMetaf_T.Text.Trim
-            '    '.WeightB4 = txtXartiLoipa_T.Text.Trim
-            '    '.TemaxiaB3_PET = txtPET_T.Text.Trim
-            '    '.WeightB6 = txtPPET_T.Text.Trim
-            '    '.WeightB7 = txtPP_T.Text.Trim
-            '    '.WeightB9 = txtPE_T.Text.Trim
-            '    '.WeightB10 = txtPS_T.Text.Trim
-            '    '.TemaxiaB8_DPS = txtDPS_T.Text.Trim
-            '    '.WeightB14 = txtPO_T.Text.Trim
-            '    '.TemaxiaB10_PVC = txtPVC_T.Text.Trim
-            '    '.WeightB16 = txtAlles_T.Text.Trim
-            '    '.WeightB17 = txtAlouminio_T.Text.Trim
-            '    '.WeightB18 = txtSidiros_T.Text.Trim
-            '    '.WeightB19 = txtYali_T.Text.Trim
-            '    '.WeightB20 = txtKsylo_T.Text.Trim
-            '    '.WeightB21 = txtSynthetesXarti_T.Text.Trim
-            '    '.TemaxiaB17_SynthetesPlast = txtSynthetesPlast_T.Text.Trim
-            '    '.WeightB23 = txtSynthetesGyali_T.Text.Trim
-            'End With
-            'bExec = myReport.fnInsertNewReportDataTbl(rF)
+    '            ' Remaining fields
+    '            .Year = txtYear.Text
+    '            .CID = iCId
+    '            .Modif = modif
+    '            .DateSentPrev = dateSentPrev
+    '            .DateSaved = String.Empty
+    '            .DateSent = String.Empty
+    '            .Comments = txtNotes.Text.Trim
+    '            .WeightB = 0
+    '            .ContribB = System.Configuration.ConfigurationManager.AppSettings("REPORT_TABLE_B_STHATHERI_EISFORA")
+    '            .WeightC = txtTblC_EisforaA.Text.Trim
+    '            .ContribC = txtTblC_Multiplier.Text.Trim
+    '            .SenderName = txtYR_SenderName.Text.Trim
+    '            .Symet1 = IIf(chkSymet1.Checked = True, 1, 0)
+    '            .Symet2 = IIf(chkSymet2.Checked = True, 1, 0)
+    '            .Symet3 = IIf(chkSymet3.Checked = True, 1, 0)
+    '            .Form2021 = EnumsGlobal.ReportTypeOldNew.Type2024
+    '            .OneUseSysk = txtOneUseSysk.Text.Trim
+    '            .MultiUseSysk = txtMultiUseSysk.Text.Trim
+    '            .PrimarySysk = txtPrimarySysk.Text.Trim
+    '            .SecondarySysk = txtSecondarySysk.Text.Trim
+    '            '.WeightB2 = txtXartiMetaf_T.Text.Trim
+    '            '.WeightB4 = txtXartiLoipa_T.Text.Trim
+    '            '.TemaxiaB3_PET = txtPET_T.Text.Trim
+    '            '.WeightB6 = txtPPET_T.Text.Trim
+    '            '.WeightB7 = txtPP_T.Text.Trim
+    '            '.WeightB9 = txtPE_T.Text.Trim
+    '            '.WeightB10 = txtPS_T.Text.Trim
+    '            '.TemaxiaB8_DPS = txtDPS_T.Text.Trim
+    '            '.WeightB14 = txtPO_T.Text.Trim
+    '            '.TemaxiaB10_PVC = txtPVC_T.Text.Trim
+    '            '.WeightB16 = txtAlles_T.Text.Trim
+    '            '.WeightB17 = txtAlouminio_T.Text.Trim
+    '            '.WeightB18 = txtSidiros_T.Text.Trim
+    '            '.WeightB19 = txtYali_T.Text.Trim
+    '            '.WeightB20 = txtKsylo_T.Text.Trim
+    '            '.WeightB21 = txtSynthetesXarti_T.Text.Trim
+    '            '.TemaxiaB17_SynthetesPlast = txtSynthetesPlast_T.Text.Trim
+    '            '.WeightB23 = txtSynthetesGyali_T.Text.Trim
+    '         End With
+    '         bExec = myReport.fnInsertNewReportDataTbl(rF)
 
-            'If Not bExec Then
-            '    lblError.Text = myReport.GetDBError & " " & myReport.GetExecutionError
-            '    Return EnumsGlobal.FunctionRes.ErrorResult
-            'Else
-            '    Return EnumsGlobal.FunctionRes.OkResult
-            'End If
+    '         If Not bExec Then
+    '            lblError.Text = myReport.GetDBError & " " & myReport.GetExecutionError
+    '            Return EnumsGlobal.FunctionRes.ErrorResult
+    '         Else
+    '            Return EnumsGlobal.FunctionRes.OkResult
+    '         End If
 
-        Catch ex As Exception
-            Return EnumsGlobal.FunctionRes.ErrorResult
-        End Try
-    End Function
+    '     Catch ex As Exception
+    '         Return EnumsGlobal.FunctionRes.ErrorResult
+    '     End Try
+    ' End Function
     Private Sub sbClearFrm()
         Try
             txtTblC_Multiplier.Text = FormatNumber(System.Configuration.ConfigurationManager.AppSettings("REPORT_TABLE_C_MULTIPLIER"), 2)
@@ -467,35 +506,35 @@ Partial Class htmlReportEditG1
             lblError.Text = "Error on sbClearFrm - " & ex.Message
         End Try
     End Sub
-    Private Function sbValidateInput(Optional ByVal bOnlyAmts As Boolean = False) As String
-        Dim tb As TextBox
-        Dim holder As ContentPlaceHolder = CType(Me.Master.FindControl("MainContent"), ContentPlaceHolder)
-        Dim sErrMsg As String = System.Configuration.ConfigurationManager.AppSettings("WarningInvalidData")
+    ' Private Function sbValidateInput(Optional ByVal bOnlyAmts As Boolean = False) As String
+    '     Dim tb As TextBox
+    '     Dim holder As ContentPlaceHolder = CType(Me.Master.FindControl("MainContent"), ContentPlaceHolder)
+    '     Dim sErrMsg As String = System.Configuration.ConfigurationManager.AppSettings("WarningInvalidData")
 
-        Try
-            'For Each c As Control In holder.Controls.OfType(Of TextBox)
-            '    If (c.ID.StartsWith("YR_Weight") Or c.ID.StartsWith("YR_Contrib") Or c.ID.StartsWith("txtTblC")) Then
-            '        tb = CType(c, TextBox)
-            '        If Not IsNumeric(tb.Text) Then
-            '            Return sErrMsg
-            '        End If
-            '    End If
-            'Next
+    '     Try
+    '         For Each c As Control In holder.Controls.OfType(Of TextBox)
+    '            If (c.ID.StartsWith("YR_Weight") Or c.ID.StartsWith("YR_Contrib") Or c.ID.StartsWith("txtTblC")) Then
+    '                tb = CType(c, TextBox)
+    '                If Not IsNumeric(tb.Text) Then
+    '                    Return sErrMsg
+    '                End If
+    '            End If
+    '         Next
 
-            'If bOnlyAmts = False Then
-            '    If txtYR_SenderName.Text.Trim = "" Then
-            '        sErrMsg = System.Configuration.ConfigurationManager.AppSettings("WarningMissingSender")
-            '        myPageEvents.sbSetFocus(txtYR_SenderName)
-            '        Return sErrMsg
-            '    End If
-            'End If
+    '         If bOnlyAmts = False Then
+    '            If txtYR_SenderName.Text.Trim = "" Then
+    '                sErrMsg = System.Configuration.ConfigurationManager.AppSettings("WarningMissingSender")
+    '                myPageEvents.sbSetFocus(txtYR_SenderName)
+    '                Return sErrMsg
+    '            End If
+    '         End If
 
-            Return String.Empty
+    '         Return String.Empty
 
-        Catch ex As Exception
-            Return ex.Message
-        End Try
-    End Function
+    '     Catch ex As Exception
+    '         Return ex.Message
+    '     End Try
+    ' End Function
 
     Private Sub sbEraseWrongDecimSep()
         Dim tb As TextBox
@@ -1135,7 +1174,7 @@ Partial Class htmlReportEditG1
                 Next
             Next
 
-            Dim matrixId As Integer = SaveMatrix(Session(sSession_UserLogin), Session(sSession_CompanyID), Session(sSession_Year), txtNotes.Text.Trim, details)
+            Dim matrixId As Integer = SaveMatrix(details)
 
             BuildMatrixTable()
 
@@ -1144,8 +1183,46 @@ Partial Class htmlReportEditG1
         End Try
     End Sub
 
-    Private Function SaveMatrix(createdBy As String, cId As Integer, year As Integer, comments As String, details As DataTable) As Integer
+    Private Function ValidateSave() as Integer
+        Dim iCId As Integer
+        Dim sessionValue As String = TryCast(Session(sSession_CompanyID), String)
+        Dim labelValue As String = lblCompanyID.Text
+
+        If Not Integer.TryParse(If(sessionValue, String.Empty).Trim(), iCId) AndAlso _
+        Not Integer.TryParse(If(labelValue, String.Empty).Trim(), iCId) Then
+
+            lblError.Text = "Invalid Company Code"
+            Return EnumsGlobal.FunctionRes.ErrorResult
+        End If
+
+        If iCId <= 0 Then
+            lblError.Text = "Invalid Company Code"
+            Return EnumsGlobal.FunctionRes.ErrorResult
+        End If
+
+        If NOT(chkNew.Checked) Then
+            'modified report
+            modif = 1
+            'get date of 1st report
+            If txtDateSentPrev.Text.Trim <> "" Then
+                dateSentPrev = Format(CDate(txtDateSentPrev.Text.Trim), "yyyy/MM/dd")
+            End If
+        End If
+
+        Dim myCookie As HttpCookie = Request.Cookies("myCookie")
+        With myCookie
+            .Values("CId") = iCId.ToString
+            .Values("Year") = txtYear.Text
+            .Values("ULogin") = Session(sSession_UserLogin)
+            .Expires = DateTime.Now.AddHours(12)
+        End With
+        Response.AppendCookie(myCookie)
+    end Function
+
+    Private Function SaveMatrix(details As DataTable) As Integer
         Try
+            if ValidateSave>0 Then Return -1
+
             Using con As New SqlConnection(ConfigurationManager.AppSettings("SQL_CONNSTR"))
                 Using cmd As New SqlCommand("dbo.spInsertYearlyReportMatrix", con)
                     cmd.CommandType = CommandType.StoredProcedure
@@ -1156,13 +1233,13 @@ Partial Class htmlReportEditG1
                     If String.IsNullOrWhiteSpace(createdBy) Then
                         cmd.Parameters.AddWithValue("@CreatedBy", "Unknown")
                     Else
-                        cmd.Parameters.AddWithValue("@CreatedBy", createdBy)
+                        cmd.Parameters.AddWithValue("@CreatedBy", Session(sSession_UserLogin))
                     End If
 
                     If String.IsNullOrWhiteSpace(comments) Then
                         cmd.Parameters.AddWithValue("@Comments", DBNull.Value)
                     Else
-                        cmd.Parameters.AddWithValue("@Comments", comments)
+                        cmd.Parameters.AddWithValue("@Comments", txtNotes.Text.Trim)
                     End If
 
                     Dim pDetails As SqlParameter = cmd.Parameters.AddWithValue("@Details", details)
@@ -1272,6 +1349,14 @@ Partial Class htmlReportEditG1
                     'txtMatrixId.Text = matrixId.ToString()
                 End Using
             End Using
+
+            Dim myCookie As HttpCookie = Request.Cookies("myCookie")
+
+            myCookie.Values.Add("Year", txtYear.Text)
+            myCookie.Values.Add("ULogin", Session(sSession_UserLogin))
+            myCookie.Expires = DateTime.Now.AddHours(12)
+            Response.Cookies.Add(myCookie)
+
             Return True
         Catch ex As Exception
             lblError.Text = "Error on LoadMatrix: " & ex.Message
@@ -1375,6 +1460,39 @@ Partial Class htmlReportEditG1
         Next
 
         Return True
+    End Function
+    Private Function FindAllTextBoxes(root As Control) As List(Of TextBox)
+        Dim results As New List(Of TextBox)()
+        Dim stack As New Stack(Of Control)()
+        stack.Push(root)
+
+        While stack.Count > 0
+            Dim current As Control = stack.Pop()
+
+            Dim tb As TextBox = TryCast(current, TextBox)
+            If tb IsNot Nothing Then results.Add(tb)
+
+            For Each child As Control In current.Controls
+                stack.Push(child)
+            Next
+        End While
+
+        Return results
+    End Function
+    Private Function ParseDecimalSafe(input As String) As Decimal
+        If String.IsNullOrWhiteSpace(input) Then Return 0D
+
+        Dim s As String = input.Trim()
+
+        'If your users type comma decimals, normalize:
+        s = s.Replace(",", ".")
+
+        Dim value As Decimal
+        If Decimal.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, value) Then
+            Return value
+        End If
+
+        Return 0D
     End Function
 #End Region
 
