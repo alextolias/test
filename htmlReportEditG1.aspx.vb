@@ -64,7 +64,7 @@ Partial Class htmlReportEditG1
             'sbFormatDecimals()
 
             '' Perform calcs
-            'sbTableA_Calculations()
+            sbTableA_Calculations()
             'sbTableBCalculations()
             'sbLoadTableC()
 
@@ -121,26 +121,20 @@ Partial Class htmlReportEditG1
         End Try
     End Sub
     Private Sub sbLoadTableA_Contribution(Optional ByVal iYear As Integer = -1)
-        Dim objTB As New TextBox
-        Dim sContribFld As String
         Try
             sbGetTableA_Contribution(iYear)
 
-            'Dim holder As ContentPlaceHolder = CType(Me.Master.FindControl("MainContent"), ContentPlaceHolder)
+            Dim holder As ContentPlaceHolder = CType(Me.Master.FindControl("MainContent"), ContentPlaceHolder)
 
-            'For iCounter As Integer = 0 To dsContribution.Tables(0).Rows.Count - 1
-            '    With dsContribution.Tables(0).Rows(iCounter)
-            '        If .Item("PT_Contrib").ToString <> "0" Then
-            '            sContribFld = .Item("PT_Field").ToString.Replace("Weight", "Contrib")
-            '            objTB = DirectCast(holder.FindControl(sContribFld), TextBox)
-            '            If sContribFld.StartsWith("YR_ContribB") Then
-            '                objTB.Text = FormatNumber(.Item("PT_Contrib"), 4)
-            '            Else
-            '                objTB.Text = FormatNumber(.Item("PT_Contrib"), 3)
-            '            End If
-            '        End If
-            '    End With
-            'Next
+            For Each row As DataRow In dsContribution.Tables(0).Rows
+                Dim controlName As String = "txtEisfW_" & row(0).ToString()
+
+                Dim ctrl As Control = holder.FindControl(controlName)
+
+                If TypeOf ctrl Is TextBox Then
+                    CType(ctrl, TextBox).Text = FormatNumber(row(1).ToString(), 2)
+                End If
+            Next
         Catch ex As Exception
             lblError.Text = "Error on sbLoadTableA_Contribution - " & ex.Message
         End Try
@@ -149,38 +143,41 @@ Partial Class htmlReportEditG1
         Dim objTBW As New TextBox
         Dim objTBC As New TextBox
         Dim objTBEE As New TextBox
-        Dim sContribFld As String
-        Dim sEEFld As String
+
         Try
-            'fSum_TableA = 0
+            fSum_TableA = 0
             'sbGetTableA_Contribution(txtYear.Text)
-            'Dim holder As ContentPlaceHolder = CType(Me.Master.FindControl("MainContent"), ContentPlaceHolder)
+            Dim holder As ContentPlaceHolder = CType(Me.Master.FindControl("MainContent"), ContentPlaceHolder)
 
-            'For iCounter As Integer = 0 To dsContribution.Tables(0).Rows.Count - 1
-            '    With dsContribution.Tables(0).Rows(iCounter)
-            '        If .Item("PT_Contrib").ToString <> "0" Then
-            '            sContribFld = .Item("PT_Field").ToString.Replace("Weight", "Contrib")
-            '            If .Item("PT_Field").ToString.StartsWith("YR_WeightB") Then
-            '                sEEFld = .Item("PT_Field").ToString & "_TE"
-            '            Else
-            '                sEEFld = .Item("PT_Field").ToString & "_EE"
-            '            End If
-            '            objTBW = DirectCast(holder.FindControl(.Item("PT_Field")), TextBox)
-            '            objTBC = DirectCast(holder.FindControl(sContribFld), TextBox)
-            '            objTBEE = DirectCast(holder.FindControl(sEEFld), TextBox)
+            Dim values() As Integer = {1, 2, 3, 5}
+            Dim i As Integer
+            Dim rows As List(Of MatrixRowDef) = GetMatrixDefinition()
+            For Each item As MatrixRowDef In rows
+                Dim rowTotal As Decimal = 0
 
-            '            If .Item("PT_Field").ToString.StartsWith("YR_WeightA") Then
-            '                objTBEE.Text = FormatNumber((objTBW.Text * objTBC.Text) / 1000, 2)
-            '                fSum_TableA += objTBEE.Text
-            '            Else
-            '                objTBEE.Text = FormatNumber((objTBW.Text * objTBC.Text), 2)
-            '            End If
-            '        End If
-            '    End With
-            'Next
+                If (Not item.IsGroupHeader) And (Not item.IsGroupTotal) Then
+                    Dim val As Decimal
+                    For Each i In values
+                        objTBW = DirectCast(holder.FindControl("txtWeight_" & item.MaterialCode & "_" & i.ToString), TextBox)
+                        If objTBW IsNot Nothing Then
+                            If Decimal.TryParse(objTBW.Text, Val) Then
+                                rowTotal += val
+                            End If
+                        End If
+                    Next
+                End If
 
-            ''display the sum
-            'txtSumTableA.Text = FormatNumber(fSum_TableA, 2)
+                rowTotal = rowTotal * item.Contribution
+
+                objTBEE = DirectCast(holder.FindControl("txtEisfWT_" & item.MaterialCode), TextBox)
+                If objTBEE IsNot Nothing Then
+                    objTBEE.Text = rowTotal.ToString()
+                End If
+                fSum_TableA += rowTotal
+            Next
+
+            'display the sum
+            txtSumTableA.Text = FormatNumber(fSum_TableA, 2)
 
         Catch ex As Exception
             lblError.Text = "Error on sbLoadTableA_Calculations - " & ex.Message
@@ -610,7 +607,9 @@ Partial Class htmlReportEditG1
                 Response.Redirect("~/login.aspx")
             End If
 
-            If sbLoadSavedData() Then
+            'If sbLoadSavedData() Then
+            If LoadMatrix() Then
+                sbLoadTableA_Contribution()
                 PerformReportCalculations()
                 'prepare system to load the pdf
                 Session(sSession_Year) = txtYear.Text
@@ -676,6 +675,7 @@ Partial Class htmlReportEditG1
         Public Property IsGroupTotal As Boolean
         Public Property Title As String
         Public Property MaterialCode As String
+        Public Property Contribution As Decimal
     End Class
 
     Protected Sub Page_Init(sender As Object, e As EventArgs) Handles Me.Init
@@ -972,7 +972,7 @@ Partial Class htmlReportEditG1
 
             For i As Integer = 1 To 6
                 Dim tdWeight As New TableCell()
-                tdWeight.CssClass = "mLabelCenter"
+                tdWeight.CssClass = "mLabelCenterxs"
                 tdWeight.Style.Item("width") = "5%"
                 Dim txtWeight As New TextBox()
                 txtWeight.ID = "txtWeight_" & CleanId(materialCode) & "_" & i.ToString()
@@ -982,7 +982,7 @@ Partial Class htmlReportEditG1
                 tr.Cells.Add(tdWeight)
 
                 Dim tdQty As New TableCell()
-                tdQty.CssClass = "mLabelCenter"
+                tdQty.CssClass = "mLabelCenterxs"
                 tdQty.Style.Item("width") = "5%"
                 Dim txtQty As New TextBox()
                 txtQty.ID = "txtQty_" & CleanId(materialCode) & "_" & i.ToString()
@@ -993,7 +993,7 @@ Partial Class htmlReportEditG1
             Next
 
             Dim tdEisfW As New TableCell()
-            tdEisfW.CssClass = "mLabelCenter"
+            tdEisfW.CssClass = "mLabelCenterxs"
             tdEisfW.Style.Item("width") = "5%"
             Dim txtEisfW As New TextBox()
             txtEisfW.ID = "txtEisfW_" & CleanId(materialCode)
@@ -1003,7 +1003,7 @@ Partial Class htmlReportEditG1
             tr.Cells.Add(tdEisfW)
 
             Dim tdEisfWT As New TableCell()
-            tdEisfWT.CssClass = "mLabelCenter"
+            tdEisfWT.CssClass = "mLabelCenterxs"
             tdEisfWT.Style.Item("width") = "5%"
             Dim txtEisfWT As New TextBox()
             txtEisfWT.ID = "txtEisfWT_" & CleanId(materialCode)
@@ -1013,17 +1013,17 @@ Partial Class htmlReportEditG1
             tr.Cells.Add(tdEisfWT)
 
             Dim tdEisfQ As New TableCell()
-            tdEisfQ.CssClass = "mLabelCenter"
+            tdEisfQ.CssClass = "mLabelCenterxs"
             tdEisfQ.Style.Item("width") = "5%"
             Dim txtEisfQ As New TextBox()
             txtEisfQ.ID = "txtEisfQ_" & CleanId(materialCode)
             txtEisfQ.CssClass = "mTextBoxFlat2026"
-            txtEisfQ.Text = "0"
+            txtEisfQ.Text = "0,0004"
             tdEisfQ.Controls.Add(txtEisfQ)
             tr.Cells.Add(tdEisfQ)
 
             Dim tdEisfQT As New TableCell()
-            tdEisfQT.CssClass = "mLabelCenter"
+            tdEisfQT.CssClass = "mLabmLabelCenterxselCenter"
             tdEisfQT.Style.Item("width") = "5%"
             Dim txtEisfQT As New TextBox()
             txtEisfQT.ID = "txtEisfQT_" & CleanId(materialCode)
@@ -1058,13 +1058,15 @@ Partial Class htmlReportEditG1
             For Each row As DataRow In dt.Rows
                 Dim id As String = row(0).ToString.Trim
                 Dim descr As String = row(1).ToString().Trim
+                Dim contrib As Decimal
+                Decimal.TryParse(row(2), contrib)
 
                 If row(5) = 1 Then
                     list.Add(New MatrixRowDef With {.IsGroupHeader = True, .MaterialCode = id, .Title = descr})
                 ElseIf row(5) = 2 Then
                     list.Add(New MatrixRowDef With {.IsGroupTotal = True, .MaterialCode = id, .Title = descr})
                 Else
-                    list.Add(New MatrixRowDef With {.MaterialCode = id, .Title = descr})
+                    list.Add(New MatrixRowDef With {.MaterialCode = id, .Title = descr, .Contribution = contrib})
                 End If
             Next
 
@@ -1213,7 +1215,7 @@ Partial Class htmlReportEditG1
             lblError.Text = "Error on SaveMatrix: " & ex.Message
         End Try
     End Function
-    Private Function LoadMatrix(cId As Integer, year As Integer) As Boolean
+    Private Function LoadMatrix() As Boolean
 
         Try
             ' Always rebuild first so the textboxes exist
@@ -1225,8 +1227,8 @@ Partial Class htmlReportEditG1
                 ' Load header
                 Using cmdHeader As New SqlCommand("dbo.spGetYearlyReportMatrixHD", con)
                     cmdHeader.CommandType = CommandType.StoredProcedure
-                    cmdHeader.Parameters.AddWithValue("@CId", cId)
-                    cmdHeader.Parameters.AddWithValue("@Year", year)
+                    cmdHeader.Parameters.AddWithValue("@CId", lblCompanyID.Text)
+                    cmdHeader.Parameters.AddWithValue("@Year", txtYear.Text)
 
                     Using rdr As SqlDataReader = cmdHeader.ExecuteReader()
                         If rdr.Read() Then
@@ -1240,8 +1242,8 @@ Partial Class htmlReportEditG1
                 ' Load details
                 Using cmdDetail As New SqlCommand("dbo.spGetYearlyReportMatrixDT", con)
                     cmdDetail.CommandType = CommandType.StoredProcedure
-                    cmdDetail.Parameters.AddWithValue("@CId", cId)
-                    cmdDetail.Parameters.AddWithValue("@Year", year)
+                    cmdDetail.Parameters.AddWithValue("@CId", lblCompanyID.Text)
+                    cmdDetail.Parameters.AddWithValue("@Year", txtYear.Text)
 
                     Using rdr As SqlDataReader = cmdDetail.ExecuteReader()
                         While rdr.Read()
