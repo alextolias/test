@@ -1,9 +1,8 @@
 ﻿CREATE PROCEDURE [dbo].[spInsertYearlyReportMatrix]
 (
-    @CreatedBy      NVARCHAR(100),
     @CId            INT,
     @Year           INT,
-    @Comments       Text,
+    @Header         dbo.YRMatrixHeaderType READONLY,
     @Details        dbo.YRMatrixDetailType READONLY
 )
 AS
@@ -15,8 +14,41 @@ BEGIN
 
     DECLARE @MatrixId INT;
 
-    INSERT INTO dbo.YearlyRpt_Matrix_HD (YRMH_CreatedBy, YRMH_CID, YRMH_Year, YRMH_Comments, YR_DateSaved)
-    VALUES (@CreatedBy, @CId, @Year, @Comments, GETDATE());
+
+    INSERT INTO dbo.YearlyRpt_Matrix_HD
+        (YRMH_CreatedBy
+        ,YRMH_DateSaved
+        ,YRMH_CID
+        ,YRMH_Year
+        ,YRMH_DateSent
+        ,YRMH_Sent
+        ,YRMH_Modif
+        ,YRMH_DateSentPrev
+        ,YRMH_Final
+        ,YRMH_Comments
+        ,YRMH_WeightC
+        ,YRMH_ContribC
+        ,YRMH_ChkSymet1
+        ,YRMH_ChkSymet2
+        ,YRMH_ChkSymet3
+        ,YRMH_SenderName)
+    SELECT CreatedBy    
+        ,DateSaved   
+        ,@CId         
+        ,@Year 
+        ,DateSent    
+        ,IsSent      
+        ,IsModif     
+        ,DateSentPrev
+        ,IsFinal     
+        ,Comments    
+        ,WeightC
+        ,ContribC
+        ,ChkSymet1   
+        ,ChkSymet2   
+        ,ChkSymet3   
+        ,SenderName 
+        FROM @Header
 
     SET @MatrixId = SCOPE_IDENTITY();
 
