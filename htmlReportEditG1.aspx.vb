@@ -1,6 +1,10 @@
 ﻿Imports System.Data
 Imports System.Data.SqlClient
-Imports System.Drawing.Drawing2D
+Imports System.Globalization
+Imports System.Runtime.CompilerServices
+Imports System.Text.RegularExpressions
+Imports AjaxControlToolkit.HtmlEditor.ToolbarButtons
+Imports DataReaderExtensions
 Partial Class htmlReportEditG1
     Inherits clsPageEvents
 
@@ -53,24 +57,20 @@ Partial Class htmlReportEditG1
     End Sub
 #Region "<LOCAL FUNCTIONS>"
     Private Sub PerformReportCalculations(Optional bRetrieve As Boolean = False)
+        Dim errMsg As String = String.Empty
         Try
 
             'sbEraseWrongDecimSep()
-            'Dim sValidRes As String = sbValidateInput(True)
-            Dim bValidRes As Boolean = ValidateMatrixInputs
-            'If sValidRes.Trim <> String.Empty Then
-            '    myPageEvents.sbDisplaySimpleMessageBox(sValidRes)
+            'If Not (ValidateMatrixInputs(errMsg)) Then
+            '    myPageEvents.sbDisplaySimpleMessageBox(errMsg)
             '    Exit Sub
             'End If
+
             'sbFormatDecimals()
 
             '' Perform calcs
             sbTableA_Calculations()
-            'sbTableBCalculations()
             sbLoadTableC()
-
-            'lblError.Text = ""
-            ''btnSend.Enabled = False
 
         Catch ex As Exception
             lblError.Text = "Error on PerformReportCalculations - " & ex.Message
@@ -162,94 +162,59 @@ Partial Class htmlReportEditG1
                     For Each i In values
                         objTBW = DirectCast(holder.FindControl("txtWeight_" & item.MaterialCode & "_" & i.ToString), TextBox)
                         If objTBW IsNot Nothing Then
-                            If Decimal.TryParse(objTBW.Text, Val) Then
+                            If Decimal.TryParse(objTBW.Text, val) Then
                                 rowTotal += val
                             End If
                         End If
                     Next
-                End If
 
-                if item.IsGroupTotal Then
+                    rowTotal = rowTotal * item.Contribution
+
+                    objTBEE = DirectCast(holder.FindControl("txtEisfWT_" & item.MaterialCode), TextBox)
+                    If objTBEE IsNot Nothing Then
+                        objTBEE.Text = rowTotal.ToString()
+                    End If
+                    fSum_TableA += rowTotal
+
+                ElseIf item.IsGroupTotal Then
                     Dim grpsumW As Decimal = 0D
                     Dim grpsumQ As Decimal = 0D
 
                     'Line items = any textbox whose ID ends with _<key> excluding totals
-                    For Each lineTb As TextBox In allTextBoxes
+                    Dim pattern As String = "_" & item.MaterialCode.Remove(item.MaterialCode.Length - 1) & "\d*_1"
+                    'Dim hasMatch As Boolean = allTextBoxes.Any(Function(tb) Regex.IsMatch(tb.ID, pattern))
+                    Dim matches = allTextBoxes.Where(Function(tb) Regex.IsMatch(tb.ID, pattern)).ToList()
+
+                    For Each lineTb As TextBox In matches
                         If lineTb.ID Is Nothing Then Continue For
                         If lineTb.ID.StartsWith("txtWeightT_", StringComparison.OrdinalIgnoreCase) Then Continue For
                         If lineTb.ID.StartsWith("txtQtyT_", StringComparison.OrdinalIgnoreCase) Then Continue For
 
-                        If lineTb.ID.EndsWith("_" & key, StringComparison.OrdinalIgnoreCase) Then
-                            If lineTb.ID.StartsWith("txtWeight_", StringComparison.OrdinalIgnoreCase) Then
-                                grpsumW += ParseDecimalSafe(lineTb.Text)
-                            ElseIf If lineTb.ID.StartsWith("txtQty_", StringComparison.OrdinalIgnoreCase) Then
-                                grpsumQ += ParseDecimalSafe(lineTb.Text)
-                            End if
+                        If lineTb.ID.StartsWith("txtWeight_", StringComparison.OrdinalIgnoreCase) Then
+                            grpsumW += ParseDecimalSafe(lineTb.Text)
+                        ElseIf lineTb.ID.StartsWith("txtQty_", StringComparison.OrdinalIgnoreCase) Then
+                            grpsumQ += ParseDecimalSafe(lineTb.Text)
                         End If
                     Next
-                end if
 
-                dim totalTbW as textbox = DirectCast(holder.FindControl("txtWeightT_" & item.MaterialCode), TextBox)
-                If totalTbW IsNot Nothing Then
-                    totalTbW.Text = grpsumW.ToString("0.00", CultureInfo.InvariantCulture)
-                End If
-                dim totalTbQ as textbox = DirectCast(holder.FindControl("txtWeightT_" & item.MaterialCode), TextBox)
-                If totalTbQ IsNot Nothing Then
-                    totalTbQ.Text = grpsumQ.ToString("0.00", CultureInfo.InvariantCulture)
+                    Dim totalTbW As TextBox = DirectCast(holder.FindControl("txtWeightT_" & item.MaterialCode), TextBox)
+                    If totalTbW IsNot Nothing Then
+                        totalTbW.Text = grpsumW.ToString("0.00", CultureInfo.InvariantCulture)
+                    End If
+                    Dim totalTbQ As TextBox = DirectCast(holder.FindControl("txtQtyT_" & item.MaterialCode), TextBox)
+                    If totalTbQ IsNot Nothing Then
+                        totalTbQ.Text = grpsumQ.ToString("0.00", CultureInfo.InvariantCulture)
+                    End If
                 End If
             Next
+
+            'display the sum
+            txtSumTableA.Text = FormatNumber(fSum_TableA, 2)
 
         Catch ex As Exception
             lblError.Text = "Error on sbLoadTableA_Calculations - " & ex.Message
         End Try
     End Sub
-    Private Function CalculateGroupTotals (rows As List(Of MatrixRowDef))
-            Try
-            For Each item As MatrixRowDef In rows
-                Dim rowTotal As Decimal = 0
-
-                If (Not item.IsGroupHeader) And (Not item.IsGroupTotal) Then
-                    Dim val As Decimal
-                    For Each i In values
-                        objTBW = DirectCast(holder.FindControl("txtWeight_" & item.MaterialCode & "_" & i.ToString), TextBox)
-                        If objTBW IsNot Nothing Then
-                            If Decimal.TryParse(objTBW.Text, Val) Then
-                                rowTotal += val
-                            End If
-                        End If
-                    Next
-                End If
-            Catch ex As Exception
-            lblError.Text = "Error on sbLoadTableA_Calculations - " & ex.Message
-        End Try
-    end Function
-    ' Private Sub sbTableBCalculations()
-    '     Dim sTableB_Eisfora As String = System.Configuration.ConfigurationManager.AppSettings("REPORT_TABLE_B_STHATHERI_EISFORA")
-    '     Dim txtBoxId As String = String.Empty
-    '     Dim txtTem As New TextBox
-    '     Try
-    '         For Each txtBox As TextBox In Me.Master.FindControl("MainContent").Controls.OfType(Of TextBox)
-    '            If (txtBox.ID.StartsWith("YR_WeightB")) Then
-    '                If IsNumeric(txtBox.Text) Then
-    '                    txtBox.Text = FormatNumber(txtBox.Text, 2)
-    '                End If
-    '            End If
-    '            If (txtBox.ID.EndsWith("_TE")) Then
-    '                txtBoxId = txtBox.ID.ToString
-    '                txtBoxId = txtBoxId.Replace("_TE", "")
-    '                txtTem = Me.Master.FindControl("MainContent").FindControl(txtBoxId)
-    '                If IsNumeric(txtTem.Text) Then
-    '                    txtBox.Text = FormatNumber(Convert.ToDouble(sTableB_Eisfora) * Convert.ToDouble(txtTem.Text), 4)
-    '                    fSum_TableB += txtBox.Text
-    '                End If
-    '            End If
-    '         Next
-    '         txtSumTableB.Text = FormatNumber(fSum_TableB, 2)
-
-    '     Catch ex As Exception
-    '         lblError.Text = "Error on sbTableBCalculations - " & ex.Message
-    '     End Try
-    ' End Sub
     Private Sub sbLoadTableC()
         Try
             Dim sSumC As String
@@ -362,132 +327,6 @@ Partial Class htmlReportEditG1
     '         Return False
     '     End Try
     ' End Function
-    ' Private Function sbSavePackagingData() As Integer
-    '     Try
-    '         Dim bExec As Boolean
-    '         Dim modif As Integer = 0 'new report
-    '         'Dim dateSentPrev As String = Format(Date.Now, "yyyy/MM/dd")
-    '         Dim dateSentPrev As String = String.Empty
-    '         Dim objTB As New TextBox
-    '         Dim iCId As Integer
-
-    '         If Not Integer.TryParse(lblCompanyID.Text, iCId) Then
-    '            iCId = -1
-    '         End If
-
-    '         If chkNew.Checked = False Then
-    '            'modified report
-    '            modif = 1
-    '            'get date of 1st report
-    '            If txtDateSentPrev.Text.Trim <> "" Then
-    '                dateSentPrev = Format(CDate(txtDateSentPrev.Text.Trim), "yyyy/MM/dd")
-    '            End If
-    '         End If
-
-    '         'Dim iCId As Integer = Session(sSession_CompanyID)
-
-    '         'If iCId <= 0 Then
-    '         '    iCId = Convert.ToInt32(myCookie.Values("CId"))
-    '         'End If
-
-    '         If iCId <= 0 Then
-    '            lblError.Text = "Invalid Company Code"
-    '            Return EnumsGlobal.FunctionRes.ErrorResult
-    '         End If
-
-    '         Dim myCookie As HttpCookie = Request.Cookies("myCookie")
-    '         With myCookie
-    '            .Values("CId") = iCId.ToString
-    '            .Values("Year") = txtYear.Text
-    '            .Values("ULogin") = Session(sSession_UserLogin)
-    '            .Expires = DateTime.Now.AddHours(12)
-    '         End With
-    '         Response.AppendCookie(myCookie)
-
-    '         Dim rF As New ReportFields2024
-    '         Dim pinfo() As Reflection.PropertyInfo = rF.GetType().GetProperties()
-    '         Dim holder As ContentPlaceHolder = CType(Me.Master.FindControl("MainContent"), ContentPlaceHolder)
-
-    '         Dim clog As New clErrorLog
-
-    '         With rF
-    '            ' TableA fields
-    '            For Each [property] As Reflection.PropertyInfo In pinfo
-    '                If ([property].Name.StartsWith("WeightA") Or [property].Name.StartsWith("WeightB")) Then
-    '                    'If [property].Name.EndsWith("A1") Or [property].Name.EndsWith("A3") Or [property].Name.EndsWith("A8") Or [property].Name.EndsWith("A12") Or [property].Name.EndsWith("A13") _
-    '                    '    Or [property].Name.EndsWith("A10") Or [property].Name.EndsWith("A11") Or [property].Name.EndsWith("A18") Or [property].Name.EndsWith("A19") _
-    '                    '    Or [property].Name.EndsWith("A20") Or [property].Name.EndsWith("A21") Or [property].Name.EndsWith("A22") Or [property].Name.EndsWith("A23") _
-    '                    '    Or [property].Name.EndsWith("A15") Then
-    '                    '    [property].SetValue(rF, "0")
-    '                    'Else
-    '                    Dim sTxtBoxName As String = String.Empty
-    '                    If [property].Name.StartsWith("WeightA") Then
-    '                        sTxtBoxName = "YR_" & [property].Name.ToString
-    '                    ElseIf [property].Name.StartsWith("WeightB") Then
-    '                        sTxtBoxName = "YR_" & [property].Name.ToString
-    '                    End If
-    '                    objTB = DirectCast(holder.FindControl(sTxtBoxName), TextBox)
-    '                    If objTB IsNot Nothing Then
-    '                        [property].SetValue(rF, objTB.Text.Trim)
-    '                    Else
-    '                        [property].SetValue(rF, "0")
-    '                    End If
-    '                End If
-    '            Next
-
-    '            ' Remaining fields
-    '            .Year = txtYear.Text
-    '            .CID = iCId
-    '            .Modif = modif
-    '            .DateSentPrev = dateSentPrev
-    '            .DateSaved = String.Empty
-    '            .DateSent = String.Empty
-    '            .Comments = txtNotes.Text.Trim
-    '            .WeightB = 0
-    '            .ContribB = System.Configuration.ConfigurationManager.AppSettings("REPORT_TABLE_B_STHATHERI_EISFORA")
-    '            .WeightC = txtTblC_EisforaA.Text.Trim
-    '            .ContribC = txtTblC_Multiplier.Text.Trim
-    '            .SenderName = txtYR_SenderName.Text.Trim
-    '            .Symet1 = IIf(chkSymet1.Checked = True, 1, 0)
-    '            .Symet2 = IIf(chkSymet2.Checked = True, 1, 0)
-    '            .Symet3 = IIf(chkSymet3.Checked = True, 1, 0)
-    '            .Form2021 = EnumsGlobal.ReportTypeOldNew.Type2024
-    '            .OneUseSysk = txtOneUseSysk.Text.Trim
-    '            .MultiUseSysk = txtMultiUseSysk.Text.Trim
-    '            .PrimarySysk = txtPrimarySysk.Text.Trim
-    '            .SecondarySysk = txtSecondarySysk.Text.Trim
-    '            '.WeightB2 = txtXartiMetaf_T.Text.Trim
-    '            '.WeightB4 = txtXartiLoipa_T.Text.Trim
-    '            '.TemaxiaB3_PET = txtPET_T.Text.Trim
-    '            '.WeightB6 = txtPPET_T.Text.Trim
-    '            '.WeightB7 = txtPP_T.Text.Trim
-    '            '.WeightB9 = txtPE_T.Text.Trim
-    '            '.WeightB10 = txtPS_T.Text.Trim
-    '            '.TemaxiaB8_DPS = txtDPS_T.Text.Trim
-    '            '.WeightB14 = txtPO_T.Text.Trim
-    '            '.TemaxiaB10_PVC = txtPVC_T.Text.Trim
-    '            '.WeightB16 = txtAlles_T.Text.Trim
-    '            '.WeightB17 = txtAlouminio_T.Text.Trim
-    '            '.WeightB18 = txtSidiros_T.Text.Trim
-    '            '.WeightB19 = txtYali_T.Text.Trim
-    '            '.WeightB20 = txtKsylo_T.Text.Trim
-    '            '.WeightB21 = txtSynthetesXarti_T.Text.Trim
-    '            '.TemaxiaB17_SynthetesPlast = txtSynthetesPlast_T.Text.Trim
-    '            '.WeightB23 = txtSynthetesGyali_T.Text.Trim
-    '         End With
-    '         bExec = myReport.fnInsertNewReportDataTbl(rF)
-
-    '         If Not bExec Then
-    '            lblError.Text = myReport.GetDBError & " " & myReport.GetExecutionError
-    '            Return EnumsGlobal.FunctionRes.ErrorResult
-    '         Else
-    '            Return EnumsGlobal.FunctionRes.OkResult
-    '         End If
-
-    '     Catch ex As Exception
-    '         Return EnumsGlobal.FunctionRes.ErrorResult
-    '     End Try
-    ' End Function
     Private Sub sbClearFrm()
         Try
             txtTblC_Multiplier.Text = FormatNumber(System.Configuration.ConfigurationManager.AppSettings("REPORT_TABLE_C_MULTIPLIER"), 2)
@@ -506,36 +345,6 @@ Partial Class htmlReportEditG1
             lblError.Text = "Error on sbClearFrm - " & ex.Message
         End Try
     End Sub
-    ' Private Function sbValidateInput(Optional ByVal bOnlyAmts As Boolean = False) As String
-    '     Dim tb As TextBox
-    '     Dim holder As ContentPlaceHolder = CType(Me.Master.FindControl("MainContent"), ContentPlaceHolder)
-    '     Dim sErrMsg As String = System.Configuration.ConfigurationManager.AppSettings("WarningInvalidData")
-
-    '     Try
-    '         For Each c As Control In holder.Controls.OfType(Of TextBox)
-    '            If (c.ID.StartsWith("YR_Weight") Or c.ID.StartsWith("YR_Contrib") Or c.ID.StartsWith("txtTblC")) Then
-    '                tb = CType(c, TextBox)
-    '                If Not IsNumeric(tb.Text) Then
-    '                    Return sErrMsg
-    '                End If
-    '            End If
-    '         Next
-
-    '         If bOnlyAmts = False Then
-    '            If txtYR_SenderName.Text.Trim = "" Then
-    '                sErrMsg = System.Configuration.ConfigurationManager.AppSettings("WarningMissingSender")
-    '                myPageEvents.sbSetFocus(txtYR_SenderName)
-    '                Return sErrMsg
-    '            End If
-    '         End If
-
-    '         Return String.Empty
-
-    '     Catch ex As Exception
-    '         Return ex.Message
-    '     End Try
-    ' End Function
-
     Private Sub sbEraseWrongDecimSep()
         Dim tb As TextBox
         Dim holder As ContentPlaceHolder = CType(Me.Master.FindControl("MainContent"), ContentPlaceHolder)
@@ -610,34 +419,6 @@ Partial Class htmlReportEditG1
 #End Region
 
 #Region "<BUTTONS>"
-    'Protected Sub btnSave_Click(ByVal sender As Object, ByVal e As System.EventArgs) Handles btnSave.Click
-    '    Dim iExecRes As Integer
-
-    '    Try
-    '        lblError.Text = ""
-    '        sbEraseWrongDecimSep()
-
-    '        Dim sValidRes As String = sbValidateInput()
-    '        If sValidRes.Trim <> String.Empty Then
-    '            myPageEvents.sbDisplaySimpleMessageBox(sValidRes)
-    '            Exit Sub
-    '        End If
-
-    '        iExecRes = sbSavePackagingData()
-
-    '        If iExecRes = EnumsGlobal.FunctionRes.OkResult Then
-    '            myPageEvents.sbDisplaySimpleMessageBox("Η καταχώρηση έγινε με επιτυχία")
-    '            'prepare system to load the pdf
-    '            Session(sSession_FileName) = Session(sSession_Year) & "_" & Format(Now, "ddMMyyyyTHHmmss")
-    '            Session(sSession_CompanyName) = lblCompanyName.Text
-    '        End If
-
-    '    Catch exDum As System.Threading.ThreadAbortException
-    '        ' Do nothing, exception raised from response.redirect
-    '    Catch ex As Exception
-    '        lblError.Text = "Error on btnSave_Click - " & ex.Message
-    '    End Try
-    'End Sub
     Private Sub sbRetrieve_Data()
         Try
             lblError.Text = ""
@@ -668,9 +449,6 @@ Partial Class htmlReportEditG1
     '    sbClearFrm()
     'End Sub
     Protected Sub btnCalculations_Click(sender As Object, e As EventArgs) Handles btnCalculations.Click
-        'If Not CheckIfSessionActive() Then
-        '    Response.Redirect("login.aspx")
-        'End If
         PerformReportCalculations()
     End Sub
 #End Region
@@ -704,10 +482,6 @@ Partial Class htmlReportEditG1
             Return False
         End Try
     End Function
-    'Public Function formatUrl() As String
-    '    Return "~/reportPDF.aspx?historical=v2024&Cid=" & lblCompanyID.Text & "&Year=" & txtYear.Text
-    'End Function
-
 #Region "<MATRIX>"
     Private Class MatrixRowDef
         Public Property IsGroupHeader As Boolean
@@ -716,7 +490,6 @@ Partial Class htmlReportEditG1
         Public Property MaterialCode As String
         Public Property Contribution As Decimal
     End Class
-
     Protected Sub Page_Init(sender As Object, e As EventArgs) Handles Me.Init
 
         BuildMatrixTable()
@@ -913,7 +686,7 @@ Partial Class htmlReportEditG1
 
         For Each item As MatrixRowDef In rows
             If item.IsGroupHeader Then
-                AddGroupRow(item.Title)
+                AddGroupRow(item.MaterialCode, item.Title)
             ElseIf item.IsGroupTotal Then
                 AddTotalRow(item.MaterialCode, item.Title)
             Else
@@ -941,15 +714,62 @@ Partial Class htmlReportEditG1
 
         QuantityDataA1.Rows.Add(tr)
     End Sub
-    Private Sub AddGroupRow(title As String)
+    Private Sub AddGroupRow(materialCode As String, title As String)
         Dim tr As New TableRow()
         tr.CssClass = "TableHeader2026"
 
         Dim td As New TableCell()
         td.Text = Server.HtmlEncode(title)
-        td.ColumnSpan = 17
-
         tr.Cells.Add(td)
+
+        td = New TableCell()
+        With td
+            .Text = "ΠΕΡΙΕΧΟΝΤΑΙ ΦΙΑΛΕΣ ΠΟΤΩΝ ΜΙΑΣ ΧΡΗΣΗΣ;"
+            .ColumnSpan = 4
+        End With
+        tr.Cells.Add(td)
+
+        td = New TableCell()
+        With td
+            .CssClass = "mLabelCenterTotals"
+            .Style.Item("width") = "5%"
+            Dim rbB As New RadioButtonList()
+            rbB.ID = "rbWeightB_" & CleanId(materialCode)
+            rbB.RepeatDirection = RepeatDirection.Horizontal
+            rbB.Items.Add(New ListItem("Ναι", "1"))
+            rbB.Items.Add(New ListItem("Όχι", "0"))
+            rbB.CssClass = "mChkRbFlat2026"
+            .ColumnSpan = 2
+            .Controls.Add(rbB)
+        End With
+        tr.Cells.Add(td)
+
+        td = New TableCell()
+        With td
+            .Text = "ΠΕΡΙΕΧΟΝΤΑΙ ΚΥΠΕΛΑΚΙΑ & ΠΕΡΙΕΚΤΕΣ ΤΡΟΦΙΜΩΝ ΠΟΤΩΝ ΜΙΑΣ ΧΡΗΣΗΣ;"
+            .ColumnSpan = 4
+        End With
+        tr.Cells.Add(td)
+
+        td = New TableCell()
+        With td
+            .CssClass = "mLabelCenterTotals"
+            .Style.Item("width") = "5%"
+            Dim rbC As New RadioButtonList()
+            rbC.ID = "rbWeightC_" & CleanId(materialCode)
+            rbC.RepeatDirection = RepeatDirection.Horizontal
+            rbC.Items.Add(New ListItem("Ναι", "1"))
+            rbC.Items.Add(New ListItem("Όχι", "0"))
+            rbC.CssClass = "mChkRbFlat2026"
+            .ColumnSpan = 2
+            .Controls.Add(rbC)
+        End With
+        tr.Cells.Add(td)
+
+        td = New TableCell()
+        td.ColumnSpan = 14
+        tr.Cells.Add(td)
+
         QuantityDataA1.Rows.Add(tr)
     End Sub
     Private Sub AddTotalRow(materialCode As String, title As String)
@@ -965,22 +785,24 @@ Partial Class htmlReportEditG1
 
         Dim tdWeight As New TableCell()
         With tdWeight
-            .CssClass = "mLabelCenter"
+            .CssClass = "mLabelCenterTotals"
             .Style.Item("width") = "5%"
             Dim txtWeight As New TextBox()
             txtWeight.ID = "txtWeightT_" & CleanId(materialCode)
             txtWeight.CssClass = "mTextBoxFlat2026"
+            txtWeight.Text = "0"
             .Controls.Add(txtWeight)
         End With
         tr.Cells.Add(tdWeight)
 
         Dim tdQty As New TableCell()
         With tdQty
-            .CssClass = "mLabelCenter"
+            .CssClass = "mLabelCenterTotals"
             .Style.Item("width") = "5%"
             Dim txtQty As New TextBox()
             txtQty.ID = "txtQtyT_" & CleanId(materialCode)
             txtQty.CssClass = "mTextBoxFlat2026"
+            txtQty.Text = "0"
             .Controls.Add(txtQty)
         End With
         tr.Cells.Add(tdQty)
@@ -1011,7 +833,7 @@ Partial Class htmlReportEditG1
 
             For i As Integer = 1 To 6
                 Dim tdWeight As New TableCell()
-                tdWeight.CssClass = "mLabelCenterxs"
+                tdWeight.CssClass = "mLabelCenter"
                 tdWeight.Style.Item("width") = "5%"
                 Dim txtWeight As New TextBox()
                 txtWeight.ID = "txtWeight_" & CleanId(materialCode) & "_" & i.ToString()
@@ -1021,7 +843,7 @@ Partial Class htmlReportEditG1
                 tr.Cells.Add(tdWeight)
 
                 Dim tdQty As New TableCell()
-                tdQty.CssClass = "mLabelCenterxs"
+                tdQty.CssClass = "mLabelCenter"
                 tdQty.Style.Item("width") = "5%"
                 Dim txtQty As New TextBox()
                 txtQty.ID = "txtQty_" & CleanId(materialCode) & "_" & i.ToString()
@@ -1032,7 +854,7 @@ Partial Class htmlReportEditG1
             Next
 
             Dim tdEisfW As New TableCell()
-            tdEisfW.CssClass = "mLabelCenterxs"
+            tdEisfW.CssClass = "mLabelCenter"
             tdEisfW.Style.Item("width") = "5%"
             Dim txtEisfW As New TextBox()
             txtEisfW.ID = "txtEisfW_" & CleanId(materialCode)
@@ -1042,7 +864,7 @@ Partial Class htmlReportEditG1
             tr.Cells.Add(tdEisfW)
 
             Dim tdEisfWT As New TableCell()
-            tdEisfWT.CssClass = "mLabelCenterxs"
+            tdEisfWT.CssClass = "mLabelCenter"
             tdEisfWT.Style.Item("width") = "5%"
             Dim txtEisfWT As New TextBox()
             txtEisfWT.ID = "txtEisfWT_" & CleanId(materialCode)
@@ -1052,7 +874,7 @@ Partial Class htmlReportEditG1
             tr.Cells.Add(tdEisfWT)
 
             Dim tdEisfQ As New TableCell()
-            tdEisfQ.CssClass = "mLabelCenterxs"
+            tdEisfQ.CssClass = "mLabelCenter"
             tdEisfQ.Style.Item("width") = "5%"
             Dim txtEisfQ As New TextBox()
             txtEisfQ.ID = "txtEisfQ_" & CleanId(materialCode)
@@ -1062,7 +884,7 @@ Partial Class htmlReportEditG1
             tr.Cells.Add(tdEisfQ)
 
             Dim tdEisfQT As New TableCell()
-            tdEisfQT.CssClass = "mLabmLabelCenterxselCenter"
+            tdEisfQT.CssClass = "mLabmLabelCenterelCenter"
             tdEisfQT.Style.Item("width") = "5%"
             Dim txtEisfQT As New TextBox()
             txtEisfQT.ID = "txtEisfQT_" & CleanId(materialCode)
@@ -1077,7 +899,6 @@ Partial Class htmlReportEditG1
             lblError.Text = "Error on AddMaterialRow - " & ex.Message
         End Try
     End Sub
-
     Private Function GetMatrixDefinition() As List(Of MatrixRowDef)
         Dim list As New List(Of MatrixRowDef)()
         Dim dt As New DataTable()
@@ -1121,11 +942,32 @@ Partial Class htmlReportEditG1
     End Function
     Protected Sub btnSave_Click(ByVal sender As Object, ByVal e As System.EventArgs) Handles btnSave.Click
         Try
+
+            Dim header As New DataTable
+            With header
+                .Columns.Add("CreatedBy", GetType(String))
+                .Columns.Add("DateSaved", GetType(Date))
+                .Columns.Add("DateSent", GetType(Date))
+                .Columns.Add("IsSent", GetType(Byte))
+                .Columns.Add("IsModif", GetType(Byte))
+                .Columns.Add("DateSentPrev", GetType(Date))
+                .Columns.Add("IsFinal", GetType(Byte))
+                .Columns.Add("Comments", GetType(String))
+                .Columns.Add("WeightC", GetType(Decimal))
+                .Columns.Add("ContribC", GetType(Decimal))
+                .Columns.Add("ChkSymet1", GetType(Byte))
+                .Columns.Add("ChkSymet2", GetType(Byte))
+                .Columns.Add("ChkSymet3", GetType(Byte))
+                .Columns.Add("SenderName", GetType(String))
+            End With
+
             Dim details As New DataTable()
-            details.Columns.Add("MaterialCode", GetType(String))
-            details.Columns.Add("PairNo", GetType(Byte))
-            details.Columns.Add("WeightValue", GetType(Decimal))
-            details.Columns.Add("QuantityValue", GetType(Decimal))
+            With details
+                .Columns.Add("MaterialCode", GetType(String))
+                .Columns.Add("PairNo", GetType(Byte))
+                .Columns.Add("WeightValue", GetType(Decimal))
+                .Columns.Add("QuantityValue", GetType(Decimal))
+            End With
 
             For Each item As MatrixRowDef In GetMatrixDefinition()
                 If item.IsGroupHeader Then
@@ -1174,7 +1016,31 @@ Partial Class htmlReportEditG1
                 Next
             Next
 
-            Dim matrixId As Integer = SaveMatrix(details)
+            Dim drh As DataRow = header.NewRow()
+            drh("CreatedBy") = Session(sSession_UserLogin)
+            drh("DateSaved") = Format(DateAndTime.Now, "yyyy-MM-dd")
+            drh("DateSent") = DBNull.Value
+            drh("IsSent") = DBNull.Value
+            drh("IsFinal") = DBNull.Value
+            drh("Comments") = txtNotes.Text.Trim
+            drh("WeightC") = txtTblC_EisforaA.Text.Trim
+            drh("ContribC") = txtTblC_Multiplier.Text.Trim
+            drh("ChkSymet1") = IIf(chkSymet1.Checked = True, 1, 0)
+            drh("ChkSymet2") = IIf(chkSymet2.Checked = True, 1, 0)
+            drh("ChkSymet3") = IIf(chkSymet3.Checked = True, 1, 0)
+            drh("SenderName") = txtYR_SenderName.Text.Trim
+
+            If Not (chkNew.Checked) Then
+                'modified report
+                drh("IsModif") = 1
+                'get date of 1st report
+                If txtDateSentPrev.Text.Trim <> "" Then
+                    drh("DateSentPrev") = Format(CDate(txtDateSentPrev.Text.Trim), "yyyy-MM-dd")
+                End If
+            End If
+            header.Rows.Add(drh)
+
+            Dim matrixId As Integer = SaveMatrix(details, header)
 
             BuildMatrixTable()
 
@@ -1183,68 +1049,51 @@ Partial Class htmlReportEditG1
         End Try
     End Sub
 
-    Private Function ValidateSave() as Integer
+    Private Function ValidateSave() As Integer
         Dim iCId As Integer
         Dim sessionValue As String = TryCast(Session(sSession_CompanyID), String)
         Dim labelValue As String = lblCompanyID.Text
 
-        If Not Integer.TryParse(If(sessionValue, String.Empty).Trim(), iCId) AndAlso _
-        Not Integer.TryParse(If(labelValue, String.Empty).Trim(), iCId) Then
-
-            lblError.Text = "Invalid Company Code"
-            Return EnumsGlobal.FunctionRes.ErrorResult
-        End If
-
-        If iCId <= 0 Then
-            lblError.Text = "Invalid Company Code"
-            Return EnumsGlobal.FunctionRes.ErrorResult
-        End If
-
-        If NOT(chkNew.Checked) Then
-            'modified report
-            modif = 1
-            'get date of 1st report
-            If txtDateSentPrev.Text.Trim <> "" Then
-                dateSentPrev = Format(CDate(txtDateSentPrev.Text.Trim), "yyyy/MM/dd")
-            End If
-        End If
-
-        Dim myCookie As HttpCookie = Request.Cookies("myCookie")
-        With myCookie
-            .Values("CId") = iCId.ToString
-            .Values("Year") = txtYear.Text
-            .Values("ULogin") = Session(sSession_UserLogin)
-            .Expires = DateTime.Now.AddHours(12)
-        End With
-        Response.AppendCookie(myCookie)
-    end Function
-
-    Private Function SaveMatrix(details As DataTable) As Integer
         Try
-            if ValidateSave>0 Then Return -1
+            If Not Integer.TryParse(If(sessionValue, String.Empty).Trim(), iCId) AndAlso
+                Not Integer.TryParse(If(labelValue, String.Empty).Trim(), iCId) Then
+
+                lblError.Text = "Invalid Company Code"
+                Return EnumsGlobal.FunctionRes.ErrorResult
+            End If
+
+            If iCId <= 0 Then
+                lblError.Text = "Invalid Company Code"
+                Return EnumsGlobal.FunctionRes.ErrorResult
+            End If
+
+            myPageEvents.AddCookie(txtYear.Text, iCId.ToString, Session(sSession_UserLogin))
+
+        Catch ex As Exception
+
+        End Try
+    End Function
+
+    Private Function SaveMatrix(details As DataTable, header As DataTable) As Integer
+        Dim modif As Integer = 0 'new report
+        Dim dateSentPrev As String = String.Empty
+        Try
+            If ValidateSave() > 0 Then Return -1
 
             Using con As New SqlConnection(ConfigurationManager.AppSettings("SQL_CONNSTR"))
                 Using cmd As New SqlCommand("dbo.spInsertYearlyReportMatrix", con)
                     cmd.CommandType = CommandType.StoredProcedure
 
-                    cmd.Parameters.AddWithValue("@CId", cId)
-                    cmd.Parameters.AddWithValue("@Year", year)
-
-                    If String.IsNullOrWhiteSpace(createdBy) Then
-                        cmd.Parameters.AddWithValue("@CreatedBy", "Unknown")
-                    Else
-                        cmd.Parameters.AddWithValue("@CreatedBy", Session(sSession_UserLogin))
-                    End If
-
-                    If String.IsNullOrWhiteSpace(comments) Then
-                        cmd.Parameters.AddWithValue("@Comments", DBNull.Value)
-                    Else
-                        cmd.Parameters.AddWithValue("@Comments", txtNotes.Text.Trim)
-                    End If
+                    cmd.Parameters.AddWithValue("@CId", lblCompanyID.Text)
+                    cmd.Parameters.AddWithValue("@Year", txtYear.Text)
 
                     Dim pDetails As SqlParameter = cmd.Parameters.AddWithValue("@Details", details)
                     pDetails.SqlDbType = SqlDbType.Structured
                     pDetails.TypeName = "dbo.YRMatrixDetailType"
+
+                    Dim pHeader As SqlParameter = cmd.Parameters.AddWithValue("@@Header", header)
+                    pDetails.SqlDbType = SqlDbType.Structured
+                    pDetails.TypeName = "dbo.YRMatrixHeaderType"
 
                     con.Open()
                     Dim result As Object = cmd.ExecuteScalar()
@@ -1256,26 +1105,26 @@ Partial Class htmlReportEditG1
             lblError.Text = "Error on SaveMatrix: " & ex.Message
         End Try
     End Function
-    Private Function UpdateMatrix(createdBy As String, cId As Integer, year As Integer, comments As String, details As DataTable) As Integer
+    Private Function UpdateMatrix(details As DataTable) As Integer
         Try
 
             Using con As New SqlConnection(ConfigurationManager.AppSettings("SQL_CONNSTR"))
                 Using cmd As New SqlCommand("dbo.usp_UpdateMatrix", con)
                     cmd.CommandType = CommandType.StoredProcedure
 
-                    cmd.Parameters.AddWithValue("@CId", cId)
-                    cmd.Parameters.AddWithValue("@Year", year)
+                    cmd.Parameters.AddWithValue("@CId", lblCompanyID.Text)
+                    cmd.Parameters.AddWithValue("@Year", txtYear.Text)
 
-                    If String.IsNullOrWhiteSpace(createdBy) Then
-                        cmd.Parameters.AddWithValue("@CreatedBy", "Unknown")
+                    If String.IsNullOrWhiteSpace(Session(sSession_UserLogin)) Then
+                        cmd.Parameters.AddWithValue("@CreatedBy", DBNull.Value)
                     Else
-                        cmd.Parameters.AddWithValue("@CreatedBy", createdBy)
+                        cmd.Parameters.AddWithValue("@CreatedBy", Session(sSession_UserLogin))
                     End If
 
-                    If String.IsNullOrWhiteSpace(comments) Then
+                    If String.IsNullOrWhiteSpace(txtNotes.Text) Then
                         cmd.Parameters.AddWithValue("@Comments", DBNull.Value)
                     Else
-                        cmd.Parameters.AddWithValue("@Comments", comments)
+                        cmd.Parameters.AddWithValue("@Comments", txtNotes.Text)
                     End If
 
                     Dim pDetails As SqlParameter = cmd.Parameters.AddWithValue("@Details", details)
@@ -1298,6 +1147,8 @@ Partial Class htmlReportEditG1
             ' Always rebuild first so the textboxes exist
             BuildMatrixTable()
 
+            'myPageEvents.AddCookie(txtYear.Text, lblCompanyID.Text, Session(sSession_UserLogin))
+
             Using con As New SqlConnection(ConfigurationManager.AppSettings("SQL_CONNSTR"))
                 con.Open()
 
@@ -1309,7 +1160,46 @@ Partial Class htmlReportEditG1
 
                     Using rdr As SqlDataReader = cmdHeader.ExecuteReader()
                         If rdr.Read() Then
-                            txtNotes.Text = If(IsDBNull(rdr("YRMH_Comments")), "", rdr("YRMH_Comments").ToString())
+                            'txtNotes.Text = If(IsDBNull(rdr("YRMH_Comments")), "", rdr("YRMH_Comments").ToString())
+                            txtNotes.Text = rdr.GetStringSafe("YRMH_Comments")
+                            'lblEtos.Text = If(IsDBNull(rdr("YRMH_Year")), "", rdr("YRMH_Year").ToString())
+                            lblEtos.Text = rdr.GetStringSafe("YRMH_Year")
+                            Dim d1 = rdr.GetDateSafe("YRMH_DateSaved")
+                            lblCDate.Text = If(d1.HasValue, d1.Value.ToShortDateString(), "")
+
+                            '------------TABLE C-----------------
+                            txtTblC_EisforaA.Text = rdr.GetDecimalSafe("YRMH_WeightC").ToString("N2")
+                            txtTblC_Multiplier.Text = rdr.GetDecimalSafe("YRMH_ContribC").ToString("N2")
+                            If txtTblC_Multiplier.Text.Trim = "0" Then
+                                txtTblC_Multiplier.Text = System.Configuration.ConfigurationManager.AppSettings("REPORT_TABLE_C_MULTIPLIER")
+                            End If
+
+                            '--------SXETIKA ME TI DILWSI--------
+                            Dim isModified As Boolean = rdr.GetBoolSafe("YRMH_Modif") 'rdr("YRMH_Modif").ToString() <> "0"
+
+                            chkEdit.Checked = isModified
+                            chkNew.Checked = Not isModified
+                            chkNew.Enabled = Not isModified
+                            txtDateSentPrev.Enabled = isModified
+
+                            If isModified Then
+                                'Dim dateSentPrev As String = rdr("YRMH_DateSentPrev").ToString().Trim()
+
+                                'If dateSentPrev = "" Then
+                                '    txtDateSentPrev.Text = ""
+                                'Else
+                                '    txtDateSentPrev.Text = FormatDateTime(CDate(dateSentPrev), DateFormat.ShortDate)
+                                'End If
+                                Dim d = rdr.GetDateSafe("YRMH_DateSentPrev")
+                                txtDateSentPrev.Text = If(d.HasValue, d.Value.ToShortDateString(), "")
+                            End If
+
+                            chkSymet1.Checked = rdr.GetBoolSafe("YRMH_ChkSymet1") 'rdr("YRMH_ChkSymet1").ToString().Trim() <> "0"
+                            chkSymet2.Checked = rdr.GetBoolSafe("YRMH_ChkSymet2") ' rdr("YRMH_ChkSymet2").ToString().Trim() <> "0"
+                            chkSymet3.Checked = rdr.GetBoolSafe("YRMH_ChkSymet3") ' rdr("YRMH_ChkSymet3").ToString().Trim() <> "0"
+
+                            'txtYR_SenderName.Text = If(IsDBNull(rdr("YRMH_SenderName")), "", rdr("YRMH_SenderName").ToString().Trim)
+                            txtYR_SenderName.Text = rdr.GetStringSafe("YRMH_SenderName")
                         Else
                             Throw New Exception("MatrixId not found.")
                         End If
@@ -1350,12 +1240,7 @@ Partial Class htmlReportEditG1
                 End Using
             End Using
 
-            Dim myCookie As HttpCookie = Request.Cookies("myCookie")
-
-            myCookie.Values.Add("Year", txtYear.Text)
-            myCookie.Values.Add("ULogin", Session(sSession_UserLogin))
-            myCookie.Expires = DateTime.Now.AddHours(12)
-            Response.Cookies.Add(myCookie)
+            sbLoadTableC()
 
             Return True
         Catch ex As Exception
@@ -1497,4 +1382,3 @@ Partial Class htmlReportEditG1
 #End Region
 
 End Class
-
