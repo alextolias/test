@@ -734,7 +734,7 @@ Partial Class htmlReportEditG1
             .CssClass = "mLabelCenterTotals"
             .Style.Item("width") = "5%"
             Dim rbB As New RadioButtonList()
-            rbB.ID = "rbWeightB_" & CleanId(materialCode)
+            rbB.ID = "rbWeight1_" & CleanId(materialCode)
             rbB.RepeatDirection = RepeatDirection.Horizontal
             rbB.Items.Add(New ListItem("Ναι", "1"))
             rbB.Items.Add(New ListItem("Όχι", "0"))
@@ -756,7 +756,7 @@ Partial Class htmlReportEditG1
             .CssClass = "mLabelCenterTotals"
             .Style.Item("width") = "5%"
             Dim rbC As New RadioButtonList()
-            rbC.ID = "rbWeightC_" & CleanId(materialCode)
+            rbC.ID = "rbWeight2_" & CleanId(materialCode)
             rbC.RepeatDirection = RepeatDirection.Horizontal
             rbC.Items.Add(New ListItem("Ναι", "1"))
             rbC.Items.Add(New ListItem("Όχι", "0"))
@@ -971,6 +971,16 @@ Partial Class htmlReportEditG1
 
             For Each item As MatrixRowDef In GetMatrixDefinition()
                 If item.IsGroupHeader Then
+                    for i as Integer =1 to 2
+                        Dim dr As DataRow = details.NewRow()
+                        Dim rbW As RadioButtonList = CType(QuantityDataA1.FindControl("rbWeightB" & i.ToString & "_" & materialCode), RadioButtonList)
+                        If txtWeight IsNot Nothing Then
+                            dr("MaterialCode") = materialCode
+                            dr("PairNo") = CByte(i)
+                            dr("WeightValue") = rbW.SelectedItem.Value
+                            details.Rows.Add(dr)
+                        end if
+                    next
                     Continue For
                 End If
 
